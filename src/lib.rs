@@ -52,7 +52,6 @@ pub fn do_work<T, U>(
     T: 'static + Send + std::marker::Sync + Clone,
     U: 'static + Send,
 {
-
     let mut vec_chunks: Vec<Vec<T>> = Vec::with_capacity(worker_count);
     let chunk_size: f32 = (workload.len() / worker_count) as f32;
     let mut chunk_size = chunk_size.ceil() as usize;
@@ -61,13 +60,10 @@ pub fn do_work<T, U>(
     }
 
     for chunk in workload.chunks(chunk_size) {
-        vec_chunks.push(chunk.to_vec());
-    }
-
-    while let Some(v) = vec_chunks.pop() {
         let sender = sender.clone();
+        let c = chunk.to_vec();
         thread::spawn(move || {
-            sender.send(work(v)).unwrap();
+            sender.send(work(c)).unwrap();
         });
     }
 }
