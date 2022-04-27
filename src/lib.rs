@@ -1,30 +1,15 @@
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::thread;
+use std::hash::Hash;
 
 pub fn frequency(input: &[&str], worker_count: usize) -> HashMap<char, usize> {
-    let mut h: HashMap<char, usize> = HashMap::new();
 
     if input.is_empty() {
-        return h;
+        return HashMap::new();
     }
 
-    type Tally = HashMap<char, usize>;
-
-    let (sender, receiver): (mpsc::Sender<Tally>, mpsc::Receiver<Tally>) = mpsc::channel();
-
-    let workload = input.iter().map(|value| (*value).to_string()).collect();
-
-    do_work(get_frequency, workload, sender, worker_count);
-
-    for received in receiver {
-        for (key, val) in received {
-            let counter = h.entry(key).or_insert(0);
-            *counter += val;
-        }
-    }
-
-    h
+    do_work(get_frequency, input, worker_count)
 }
 
 fn get_frequency(input: Vec<String>) -> HashMap<char, usize> {
@@ -43,14 +28,10 @@ fn get_frequency(input: Vec<String>) -> HashMap<char, usize> {
     h
 }
 
-pub fn do_work<T, U>(
-    work: fn(Vec<T>) -> U,
-    workload: Vec<T>,
-    sender: mpsc::Sender<U>,
-    worker_count: usize,
-) where
+pub fn do_work<T>(work: fn(Vec<T>) -> HashMap<char,usize>, workload: &[&str], worker_count: usize) -> HashMap<char,usize> 
+where
     T: 'static + Send + std::marker::Sync + Clone,
-    U: 'static + Send,
+    Vec<T>: FromIterator<String>
 {
     let mut vec_chunks: Vec<Vec<T>> = Vec::with_capacity(worker_count);
     let chunk_size: f32 = (workload.len() / worker_count) as f32;
@@ -59,11 +40,23 @@ pub fn do_work<T, U>(
         chunk_size = 1;
     }
 
+    let mut threads = Vec::with_capacity(worker_count);
+
     for chunk in workload.chunks(chunk_size) {
-        let sender = sender.clone();
-        let c = chunk.to_vec();
-        thread::spawn(move || {
-            sender.send(work(c)).unwrap();
-        });
+        let c = chunk.iter().map(|&x| x.to_string()).collect();
+        let t = thread::spawn(move || work(c));
+        threads.push(t);
     }
+    
+    let mut hash = HashMap::new();
+
+    for t in threads {
+        let h = t.join().unwrap();
+        for (key, val) in h {
+            let counter = hash.entry(key).or_insert(0);
+            *counter += val;
+        }
+    }
+
+    hash
 }
